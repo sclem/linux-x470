@@ -1,0 +1,52 @@
+version: 2.1
+
+jobs:
+  build:
+    docker:
+      - image: archlinux:latest
+    steps:
+      - run:
+          name: pull deps
+          command: |
+            pacman -Sy --noconfirm --needed base-devel asp
+      - run:
+          name: clone linux
+          command: |
+            mkdir /tmp/build
+            cd /tmp/build
+            asp update linux
+            asp -f export linux
+      - checkout
+      - run:
+          name: patch
+          command: |
+            mv ~/project/asus_x470.patch /tmp/build/linux/
+            sed -i '
+            /^pkgbase=linux$/ s/$/-x470/;
+            /^source=($/{
+            N;
+            N;
+            a \ \ asus_x470.patch
+            }' /tmp/build/linux/PKGBUILD
+            cat /tmp/build/linux/PKGBUILD
+            chown -R nobody:nobody /tmp/build
+            cd /tmp/build/linux
+            sudo -u nobody makepkg -g >> PKGBUILD
+      - run:
+          name: compile
+          command: |
+            echo "nobody ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+            cd /tmp/build/linux
+            sudo -u nobody makepkg -s --noconfirm --skippgpcheck
+            mkdir -p /tmp/output
+            mv linux-*.tar.xz /tmp/output
+      - store_artifacts:
+          path: /tmp/output
+
+workflows:
+  linux:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /.*/
